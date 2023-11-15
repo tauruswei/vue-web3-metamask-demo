@@ -13,6 +13,9 @@
     <button @click="sendERC20"> 发送 erc20 代币 </button>
   </div>
   <div>
+    <button @click="depositERC20"> 使用 erc20 质押 </button>
+  </div>
+  <div>
     <button @click="deposit"> 质押 </button>
   </div>
   <div>
@@ -36,21 +39,39 @@
   <div>
     <button @click="estimateGasLimitForETHTransfer">估算 eth 转账的 gas limit</button>
   </div>
+  <div>
+    <img :src="imageSrc" alt="Image" />
+    <button @click="fetchImage">Fetch Image</button>
+  </div>
 </template>
 
 <script>
 import { ethers } from 'ethers'
-import {contractAddress,contractABI,contractERC20Address,contractERC20ABI} from "@/components/contract";
+import {contractAddress,contractABI,contractERC20Address,contractERC20ABI,contractERC20GameAddress,contractERC20GameABI} from "@/components/contract";
+import axios from 'axios';
+
 
 export default {
   name: 'App',
   data(){
     return{
       userAddress:"",
-      estimatedGasFee: null  // 用于存储估算的Gas费用
+      estimatedGasFee: null, // 用于存储估算的Gas费用
+      imageSrc: null,
     }
   },
   methods:{
+    async fetchImage() {
+      try {
+        const response = await axios.get('http://localhost:8090/aac/getImage', {
+          responseType: 'blob', // important
+        });
+        const url = URL.createObjectURL(new Blob([response.data]));
+        this.imageSrc = url;
+      } catch (error) {
+        console.error('Error fetching the image', error);
+      }
+    },
     async checkLogin(){
       const { ethereum } = window
       if(!ethereum){
@@ -108,6 +129,13 @@ export default {
       return contract
     },
 
+    ContractERC20Game(){
+      const provider = this.Provider()
+      const signer = provider.getSigner()
+      const contract = new ethers.Contract(contractERC20GameAddress,contractERC20GameABI,signer)
+      return contract
+    },
+
     async sendERC20(){
       const AMOUNT_TO_SEND = ethers.utils.parseUnits("10000", 18); // 发送10个代币，假设代币有18个小数位
       const RECEIVER_ADDRESS = "0x03cd3509b49b1a16acf64658ba25cd3f08b340e0"; // 这里替换为接收方的以太坊地址
@@ -147,6 +175,34 @@ export default {
       try {
         // 调用 deposit 方法并发送ETH
         let tx = await contract.deposit({ value: AMOUNT_TO_DEPOSIT });
+
+        console.log("Deposit transaction hash:", tx.hash);
+
+        let receipt = await tx.wait(); // 等待交易确认
+
+        console.log("Deposit has been confirmed:", receipt);
+      } catch (error) {
+        console.error("Failed to deposit:", error);
+        alert("存款失败：" + error.message);
+      }
+    },
+
+
+    async depositERC20(){
+      const AMOUNT_TO_DEPOSIT = ethers.utils.parseUnits("1000", 18); // 发送10个代币，假设代币有18个小数位
+      const POOL_INDEX = 0;
+
+
+      if (!this.userAddress) {
+        alert("请先登录");
+        return;
+      }
+
+      const contract = this.ContractERC20Game();
+
+      try {
+        // 调用 deposit 方法并发送ETH
+        let tx = await contract.deposit(POOL_INDEX, AMOUNT_TO_DEPOSIT);
 
         console.log("Deposit transaction hash:", tx.hash);
 
