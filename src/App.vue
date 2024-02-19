@@ -16,6 +16,9 @@
     <button @click="depositERC20"> 使用 erc20 质押 </button>
   </div>
   <div>
+    <button @click="depositErc20Permit"> 使用 erc20 permit 质押 </button>
+  </div>
+  <div>
     <button @click="deposit"> 质押 </button>
   </div>
   <div>
@@ -47,7 +50,16 @@
 
 <script>
 import { ethers } from 'ethers'
-import {contractAddress,contractABI,contractERC20Address,contractERC20ABI,contractERC20GameAddress,contractERC20GameABI} from "@/components/contract";
+import {
+  contractAddress,
+  contractABI,
+  contractERC20Address,
+  contractERC20ABI,
+  contractERC20GameAddress,
+  contractERC20GameABI,
+  MyAppContractErc20PermitABI,MyAppContractErc20PermitAddress,
+  ERC20PermitABI, ERC20PermitAddress
+} from "@/components/contract";
 import axios from 'axios';
 
 
@@ -162,6 +174,72 @@ export default {
       }
     },
 
+
+    async depositErc20Permit(){
+      const AMOUNT_TO_DEPOSIT = ethers.utils.parseUnits("1000", 18); // 发送10000个代币，假设代币有18个小数位
+
+      if (!this.userAddress) {
+        alert("请先登录");
+        return;
+      }
+
+      try {
+
+        const provider = this.Provider();
+        const signer = provider.getSigner();
+        let ownerAddress = await signer.getAddress(); // 确保使用await
+
+        const MyAppContractErc20Permit = new ethers.Contract(MyAppContractErc20PermitAddress, MyAppContractErc20PermitABI, signer);
+        const Erc20Permit = new ethers.Contract(ERC20PermitAddress, ERC20PermitABI, signer);
+
+        const deadline = Math.floor(Date.now() / 1000) + 3600; // Permit有效期为1小时
+        const nonce = await Erc20Permit.nonces(ownerAddress);
+
+        const permitData = {
+          owner: ownerAddress, // 确保这是一个有效的字符串地址
+          spender: MyAppContractErc20Permit.address, // 使用.address获取字符串地址
+          value: AMOUNT_TO_DEPOSIT.toString(),
+          nonce: nonce.toString(),
+          deadline
+        };
+
+        const domain = {
+          name: await Erc20Permit.name(),
+          version: '1',
+          chainId: await signer.getChainId(),
+          verifyingContract: Erc20Permit.address.toString() // 确保这是一个字符串
+        };
+
+        const types = {
+          Permit: [
+            { name: 'owner', type: 'address' },
+            { name: 'spender', type: 'address' },
+            { name: 'value', type: 'uint256' },
+            { name: 'nonce', type: 'uint256' },
+            { name: 'deadline', type: 'uint256' }
+          ]
+        };
+
+        const signature = await signer._signTypedData(domain, types, permitData);
+
+        const { v, r, s } = ethers.utils.splitSignature(signature);
+        console.log("5 :");
+
+        let tx = await MyAppContractErc20Permit.depositTokens(AMOUNT_TO_DEPOSIT, deadline, v, r, s);
+        console.log("6 :");
+
+
+        console.log("Deposit transaction hash:", tx.hash);
+
+        let receipt = await tx.wait(); // 等待交易确认
+
+        console.log("Deposit has been confirmed:", receipt);
+      } catch (error) {
+        console.error("Failed to deposit:", error);
+        alert("存款失败：" + error.message);
+      }
+    },
+
     async deposit(){
       const AMOUNT_TO_DEPOSIT = ethers.utils.parseEther("0.01"); // 存款0.1 ETH，你可以根据需要调整这个值
 
@@ -190,7 +268,7 @@ export default {
 
     async depositERC20(){
       const AMOUNT_TO_DEPOSIT = ethers.utils.parseUnits("1000", 18); // 发送10个代币，假设代币有18个小数位
-      const POOL_INDEX = 0;
+      const POOL_INDEX = 0.0;
 
 
       if (!this.userAddress) {
